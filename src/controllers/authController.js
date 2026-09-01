@@ -29,7 +29,7 @@ export function login(req, res) {
   const { email, password } = req.body ?? {};
   const user = findByEmail(email ?? '');
 
-  if (!user || !verifyPassword(user.passwordHash, password ?? '')) {
+  if (!user || !verifyPassword(password ?? '', user.passwordHash)) {
     return res.status(401).json({ error: 'Invalid credentials' });
   }
 
