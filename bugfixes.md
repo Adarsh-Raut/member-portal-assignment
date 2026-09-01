@@ -172,3 +172,55 @@ return res.json(publicUser(user));
 If the hash leaves the server, an attacker who steals a token or watches logs can try to crack the password offline. The hash should never leave the database.
 
 ---
+
+## Bug 5: Anyone can make themselves an admin
+
+**What was wrong:**
+If you sent `{"role":"admin"}` when registering, you got an admin account. Since anyone can register, this means anyone could become admin.
+
+**Where it was:**
+`src/controllers/authController.js:7,19` and `src/services/userService.js:44`
+
+`authController` took `role` straight from the request body and passed it to `createUser`. `userService` then saved whatever role it got. No check.
+
+**How to test it:**
+```bash
+curl -i -X POST http://localhost:3000/auth/register \
+  -H 'Content-Type: application/json' \
+  -d '{"email":"sneaky@example.com","password":"supersecret1","name":"Sneaky","role":"admin"}'
+# Before fix: 201 with "role":"admin" (bad)
+# After fix: 201 with "role":"member" (good)
+
+# Normal register should still be member:
+curl -X POST http://localhost:3000/auth/register \
+  -H 'Content-Type: application/json' \
+  -d '{"email":"normal@example.com","password":"supersecret1","name":"Normal"}'
+# 201 with "role":"member"
+```
+
+**How to fix:**
+Remove `role` from the client input and hardcode it:
+```js
+// src/controllers/authController.js:7,19
+// before
+const { email, password, name, role } = req.body ?? {};
+createUser({ email, password, name, role: role ?? 'member' });
+
+// after
+const { email, password, name } = req.body ?? {};
+createUser({ email, password, name });
+
+// src/services/userService.js:44
+// before
+export function createUser({ email, password, name, role }) {
+  const user = { ..., role, ... }
+
+// after
+export function createUser({ email, password, name }) {
+  const user = { ..., role: 'member', ... }
+```
+
+**Why it matters:**
+Anyone could give themselves admin rights and then read all users or do anything admin can do. It's a full privilege escalation.
+
+---

@@ -4,7 +4,7 @@ import { verifyPassword } from '../services/passwordService.js';
 import { issueToken } from '../services/tokenService.js';
 
 export function register(req, res) {
-  const { email, password, name, role } = req.body ?? {};
+  const { email, password, name } = req.body ?? {};
 
   if (!email || !password) {
     return res.status(400).json({ error: 'email and password are required' });
@@ -16,7 +16,7 @@ export function register(req, res) {
       .json({ error: `password must be at least ${MIN_PASSWORD_LENGTH} characters` });
   }
 
-  const result = createUser({ email, password, name, role: role ?? 'member' });
+  const result = createUser({ email, password, name });
 
   if (result.error === 'EMAIL_TAKEN') {
     return res.status(409).json({ error: 'Email already registered' });

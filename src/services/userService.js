@@ -41,12 +41,12 @@ export function findById(id) {
   return users.find((user) => user.id === id) ?? null;
 }
 
-export function createUser({ email, password, name, role }) {
+export function createUser({ email, password, name }) {
   const user = {
     id: nextId(),
     email: String(email).trim(),
     name: name ?? '',
-    role,
+    role: 'member',
     passwordHash: hashPassword(password),
     createdAt: new Date().toISOString(),
   };
