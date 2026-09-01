@@ -1,5 +1,5 @@
 import { MIN_PASSWORD_LENGTH } from '../config.js';
-import { findById, replacePassword } from '../services/userService.js';
+import { findById, publicUser, replacePassword } from '../services/userService.js';
 
 export function getMe(req, res) {
   const user = findById(req.auth.sub);
@@ -8,7 +8,7 @@ export function getMe(req, res) {
     return res.status(404).json({ error: 'Account not found' });
   }
 
-  return res.json(user);
+  return res.json(publicUser(user));
 }
 
 export function changePassword(req, res) {

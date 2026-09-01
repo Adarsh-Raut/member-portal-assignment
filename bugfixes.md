@@ -137,3 +137,38 @@ if (req.auth?.role !== role) {
 Members could see every account in the system. Admins could not do their job. It leaks user data and breaks access control.
 
 ---
+
+## Bug 4: Profile shows the password hash
+
+**What was wrong:**
+`GET /me` returned the password hash along with the normal profile data. You could see a `passwordHash` field like `"a1b2c3:9f8e..."` in the response.
+
+**Where it was:**
+`src/controllers/userController.js:11` and `src/services/userService.js:24`
+
+The project already has a helper `publicUser` that picks only the safe fields: `id, email, name, role, createdAt`. The admin list used it, but `getMe` just did `res.json(user)` and sent the whole database row including the hash.
+
+**How to test it:**
+```bash
+TOKEN=$(curl -s -X POST http://localhost:3000/auth/login -H 'Content-Type: application/json' -d '{"email":"member@example.com","password":"memberpass123"}' | python3 -c "import sys,json;print(json.load(sys.stdin)['token'])")
+curl -s http://localhost:3000/me -H "Authorization: Bearer $TOKEN" | python3 -m json.tool
+# Before fix: has "passwordHash"
+# After fix: only id, email, name, role, createdAt
+```
+
+**How to fix:**
+In `src/controllers/userController.js:2,11` import and use the filter:
+```js
+// before (broken)
+import { findById, replacePassword } from '../services/userService.js';
+return res.json(user);
+
+// after (fixed)
+import { findById, publicUser, replacePassword } from '../services/userService.js';
+return res.json(publicUser(user));
+```
+
+**Why it matters:**
+If the hash leaves the server, an attacker who steals a token or watches logs can try to crack the password offline. The hash should never leave the database.
+
+---
