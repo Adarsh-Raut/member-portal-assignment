@@ -96,3 +96,44 @@ const payload = verifyToken(token);
 Without signature check, anyone can make themselves an admin or pretend to be any user. It's a full login bypass. No secret needed.
 
 ---
+
+## Bug 3: Admin check is backwards
+
+**What was wrong:**
+`GET /admin/users` let a normal member see all users (200) but blocked a real admin (403). The check was flipped.
+
+**Where it was:**
+`src/middleware/requireRole.js:2` and `src/app.js:15`
+
+`requireRole('admin')` is used on the `/admin` routes. The code inside was:
+`if (req.auth?.role === role) return 403` - so if your role matched the required role, you got blocked. If it did not match, you got in.
+
+**How to test it:**
+```bash
+# login as admin and member to get two tokens
+curl -s -X POST http://localhost:3000/auth/login -H 'Content-Type: application/json' -d '{"email":"admin@example.com","password":"adminpass123"}'
+curl -s -X POST http://localhost:3000/auth/login -H 'Content-Type: application/json' -d '{"email":"member@example.com","password":"memberpass123"}'
+
+curl -i http://localhost:3000/admin/users -H "Authorization: Bearer ADMIN_TOKEN"
+# Before fix: 403 (wrong)
+# After fix: 200 with list of users
+
+curl -i http://localhost:3000/admin/users -H "Authorization: Bearer MEMBER_TOKEN"
+# Before fix: 200 with all users leaked (bad)
+# After fix: 403 Forbidden
+```
+
+**How to fix:**
+In `src/middleware/requireRole.js:2` flip the check:
+```js
+// before (broken)
+if (req.auth?.role === role) {
+
+// after (fixed)
+if (req.auth?.role !== role) {
+```
+
+**Why it matters:**
+Members could see every account in the system. Admins could not do their job. It leaks user data and breaks access control.
+
+---
