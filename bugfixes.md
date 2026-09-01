@@ -275,3 +275,54 @@ export function createUser({ email, password, name }) {
 If the same email can exist twice, login becomes confusing (which account do you get?), and it breaks the rule that email is unique. It can also be used to block someone else from registering or to create confusion.
 
 ---
+
+## Bug 7: Password can be changed without the old password
+
+**What was wrong:**
+`PATCH /me/password` let you set a new password even if you sent a wrong `currentPassword`. It did not check the old password at all.
+
+**Where it was:**
+`src/controllers/userController.js:15` and `src/services/passwordService.js:12`
+
+The code only read `newPassword` from the body. It never read `currentPassword` and never called `verifyPassword`. It just called `replacePassword` directly.
+
+**How to test it:**
+```bash
+TOKEN=$(curl -s -X POST http://localhost:3000/auth/login -H 'Content-Type: application/json' -d '{"email":"member@example.com","password":"memberpass123"}' | python3 -c "import sys,json;print(json.load(sys.stdin)['token'])")
+
+# wrong current should fail
+curl -i -X PATCH http://localhost:3000/me/password \
+  -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
+  -d '{"currentPassword":"wrong-one","newPassword":"hijacked12345"}'
+# Before fix: 200 updated true and password changed (bad)
+# After fix: 401 Current password is incorrect
+
+# correct should work
+curl -i -X PATCH http://localhost:3000/me/password \
+  -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
+  -d '{"currentPassword":"memberpass123","newPassword":"freshpass456"}'
+# 200 updated true, then login with new password works
+```
+
+**How to fix:**
+In `src/controllers/userController.js:1,15` import the check and add it:
+```js
+// before (broken)
+import { findById, publicUser, replacePassword } from '../services/userService.js';
+const { newPassword } = req.body ?? {};
+// ... length check then replacePassword
+
+// after (fixed)
+import { findById, publicUser, replacePassword } from '../services/userService.js';
+import { verifyPassword } from '../services/passwordService.js';
+const { currentPassword, newPassword } = req.body ?? {};
+// after finding user:
+if (!currentPassword || !verifyPassword(currentPassword, user.passwordHash)) {
+  return res.status(401).json({ error: 'Current password is incorrect' });
+}
+```
+
+**Why it matters:**
+If someone gets your token for a short time (shared computer, XSS), they can lock you out forever by changing the password without knowing the old one. Asking for the old password proves you are the real owner.
+
+---
