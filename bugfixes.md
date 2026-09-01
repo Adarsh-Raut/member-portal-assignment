@@ -224,3 +224,54 @@ export function createUser({ email, password, name }) {
 Anyone could give themselves admin rights and then read all users or do anything admin can do. It's a full privilege escalation.
 
 ---
+
+## Bug 6: Same email can register many times
+
+**What was wrong:**
+You could register the same email twice and both times got 201. Now two accounts have the same email. The second one should have been 409.
+
+**Where it was:**
+`src/services/userService.js:44` and `src/controllers/authController.js:21`
+
+`authController` already had code to handle `EMAIL_TAKEN` -> 409, but `userService.createUser` never returned that error. It just created a new user every time without checking if the email already exists. The helper `findByEmail` existed but was not used in `createUser`.
+
+**How to test it:**
+```bash
+curl -i -X POST http://localhost:3000/auth/register \
+  -H 'Content-Type: application/json' \
+  -d '{"email":"dup@example.com","password":"supersecret1","name":"Dup"}'
+# First time: 201
+
+curl -i -X POST http://localhost:3000/auth/register \
+  -H 'Content-Type: application/json' \
+  -d '{"email":"dup@example.com","password":"supersecret1","name":"Dup"}'
+# Before fix: 201 again (bad)
+# After fix: 409 Email already registered
+
+# Case should also count - findByEmail is case-insensitive:
+curl -i -X POST http://localhost:3000/auth/register \
+  -H 'Content-Type: application/json' \
+  -d '{"email":"DUP@example.com","password":"supersecret1","name":"Dup2"}'
+# After fix: 409
+```
+
+**How to fix:**
+At the top of `createUser` in `src/services/userService.js:44` add a check:
+```js
+// before (broken)
+export function createUser({ email, password, name }) {
+  const user = { ...
+
+// after (fixed)
+export function createUser({ email, password, name }) {
+  if (findByEmail(email)) {
+    return { error: 'EMAIL_TAKEN' };
+  }
+  const user = { ...
+```
+`authController` already maps that error to 409, so no other change needed.
+
+**Why it matters:**
+If the same email can exist twice, login becomes confusing (which account do you get?), and it breaks the rule that email is unique. It can also be used to block someone else from registering or to create confusion.
+
+---

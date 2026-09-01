@@ -42,6 +42,10 @@ export function findById(id) {
 }
 
 export function createUser({ email, password, name }) {
+  if (findByEmail(email)) {
+    return { error: 'EMAIL_TAKEN' };
+  }
+
   const user = {
     id: nextId(),
     email: String(email).trim(),
