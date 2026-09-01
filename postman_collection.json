@@ -1,0 +1,197 @@
+{
+  "info": {
+    "name": "Member Portal API",
+    "description": "Accounts and sessions for the member portal. Run Login first — it stores the token in the {{token}} collection variable.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "baseUrl", "value": "http://localhost:3000" },
+    { "key": "token", "value": "" },
+    { "key": "adminToken", "value": "" }
+  ],
+  "item": [
+    {
+      "name": "Register",
+      "request": {
+        "method": "POST",
+        "header": [{ "key": "Content-Type", "value": "application/json" }],
+        "url": { "raw": "{{baseUrl}}/auth/register", "host": ["{{baseUrl}}"], "path": ["auth", "register"] },
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"email\": \"nia@example.com\",\n  \"password\": \"supersecret1\",\n  \"name\": \"Nia\"\n}"
+        },
+        "description": "201 with the new account. New accounts are always role \"member\"."
+      }
+    },
+    {
+      "name": "Register (duplicate email)",
+      "request": {
+        "method": "POST",
+        "header": [{ "key": "Content-Type", "value": "application/json" }],
+        "url": { "raw": "{{baseUrl}}/auth/register", "host": ["{{baseUrl}}"], "path": ["auth", "register"] },
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"email\": \"member@example.com\",\n  \"password\": \"supersecret1\",\n  \"name\": \"Copycat\"\n}"
+        },
+        "description": "Expected: 409 Email already registered."
+      }
+    },
+    {
+      "name": "Register (asking for admin)",
+      "request": {
+        "method": "POST",
+        "header": [{ "key": "Content-Type", "value": "application/json" }],
+        "url": { "raw": "{{baseUrl}}/auth/register", "host": ["{{baseUrl}}"], "path": ["auth", "register"] },
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"email\": \"sneaky@example.com\",\n  \"password\": \"supersecret1\",\n  \"name\": \"Sneaky\",\n  \"role\": \"admin\"\n}"
+        },
+        "description": "Expected: 201 with role \"member\". Registration is public, so the caller does not get to choose."
+      }
+    },
+    {
+      "name": "Login (member)",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "const body = pm.response.json();",
+              "if (body.token) { pm.collectionVariables.set('token', body.token); }"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [{ "key": "Content-Type", "value": "application/json" }],
+        "url": { "raw": "{{baseUrl}}/auth/login", "host": ["{{baseUrl}}"], "path": ["auth", "login"] },
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"email\": \"member@example.com\",\n  \"password\": \"memberpass123\"\n}"
+        },
+        "description": "Expected: 200 with a token. Saves it to {{token}}."
+      }
+    },
+    {
+      "name": "Login (admin)",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "const body = pm.response.json();",
+              "if (body.token) { pm.collectionVariables.set('adminToken', body.token); }"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [{ "key": "Content-Type", "value": "application/json" }],
+        "url": { "raw": "{{baseUrl}}/auth/login", "host": ["{{baseUrl}}"], "path": ["auth", "login"] },
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"email\": \"admin@example.com\",\n  \"password\": \"adminpass123\"\n}"
+        },
+        "description": "Expected: 200 with a token. Saves it to {{adminToken}}."
+      }
+    },
+    {
+      "name": "Login (wrong password)",
+      "request": {
+        "method": "POST",
+        "header": [{ "key": "Content-Type", "value": "application/json" }],
+        "url": { "raw": "{{baseUrl}}/auth/login", "host": ["{{baseUrl}}"], "path": ["auth", "login"] },
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"email\": \"member@example.com\",\n  \"password\": \"not-the-password\"\n}"
+        },
+        "description": "Expected: 401 Invalid credentials."
+      }
+    },
+    {
+      "name": "My profile",
+      "request": {
+        "method": "GET",
+        "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+        "url": { "raw": "{{baseUrl}}/me", "host": ["{{baseUrl}}"], "path": ["me"] },
+        "description": "Expected: 200 with id, email, name, role, createdAt — and no password material."
+      }
+    },
+    {
+      "name": "My profile (no token)",
+      "request": {
+        "method": "GET",
+        "url": { "raw": "{{baseUrl}}/me", "host": ["{{baseUrl}}"], "path": ["me"] },
+        "description": "Expected: 401 Missing bearer token."
+      }
+    },
+    {
+      "name": "My profile (tampered token)",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer eyJzdWIiOjEsInJvbGUiOiJhZG1pbiIsImV4cCI6MTg5MzQ1NjAwMH0.not-a-real-signature"
+          }
+        ],
+        "url": { "raw": "{{baseUrl}}/me", "host": ["{{baseUrl}}"], "path": ["me"] },
+        "description": "A payload claiming user 1 / role admin, with a signature that does not match. Expected: 401."
+      }
+    },
+    {
+      "name": "Change password",
+      "request": {
+        "method": "PATCH",
+        "header": [
+          { "key": "Authorization", "value": "Bearer {{token}}" },
+          { "key": "Content-Type", "value": "application/json" }
+        ],
+        "url": { "raw": "{{baseUrl}}/me/password", "host": ["{{baseUrl}}"], "path": ["me", "password"] },
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"currentPassword\": \"memberpass123\",\n  \"newPassword\": \"freshpass456\"\n}"
+        },
+        "description": "Expected: 200 {\"updated\": true}."
+      }
+    },
+    {
+      "name": "Change password (wrong current)",
+      "request": {
+        "method": "PATCH",
+        "header": [
+          { "key": "Authorization", "value": "Bearer {{token}}" },
+          { "key": "Content-Type", "value": "application/json" }
+        ],
+        "url": { "raw": "{{baseUrl}}/me/password", "host": ["{{baseUrl}}"], "path": ["me", "password"] },
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"currentPassword\": \"not-the-password\",\n  \"newPassword\": \"hijacked12345\"\n}"
+        },
+        "description": "Expected: 401 Current password is incorrect."
+      }
+    },
+    {
+      "name": "All users (as admin)",
+      "request": {
+        "method": "GET",
+        "header": [{ "key": "Authorization", "value": "Bearer {{adminToken}}" }],
+        "url": { "raw": "{{baseUrl}}/admin/users", "host": ["{{baseUrl}}"], "path": ["admin", "users"] },
+        "description": "Expected: 200 with every account."
+      }
+    },
+    {
+      "name": "All users (as member)",
+      "request": {
+        "method": "GET",
+        "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+        "url": { "raw": "{{baseUrl}}/admin/users", "host": ["{{baseUrl}}"], "path": ["admin", "users"] },
+        "description": "Expected: 403 Forbidden."
+      }
+    }
+  ]
+}
